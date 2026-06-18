@@ -2,10 +2,10 @@ const mongoose = require('mongoose');
 
 const imageConfigSchema = new mongoose.Schema(
   {
-    planId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'HostingPlan',
+    cardKey: {
+      type: String,
       required: true,
+      trim: true,
     },
     imageUrl: {
       type: String,
@@ -13,8 +13,8 @@ const imageConfigSchema = new mongoose.Schema(
     },
     imageType: {
       type: String,
-      enum: ['logo', 'banner', 'screenshot', 'icon'],
-      default: 'logo',
+      enum: ['card', 'logo', 'banner', 'screenshot', 'icon'],
+      default: 'card',
     },
     uploadedAt: {
       type: Date,
@@ -28,6 +28,6 @@ const imageConfigSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-imageConfigSchema.index({ planId: 1, imageType: 1 }, { unique: true });
+imageConfigSchema.index({ cardKey: 1, imageType: 1 }, { unique: true });
 
 module.exports = mongoose.models.ImageConfig || mongoose.model('ImageConfig', imageConfigSchema);

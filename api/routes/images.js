@@ -1,7 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const ImageConfig = require('../../models/ImageConfig');
-const HostingPlan = require('../../models/HostingPlan');
 
 const router = express.Router();
 
@@ -16,9 +15,7 @@ function handleValidation(req, res, next) {
 // GET /api/images
 router.get('/', async (req, res, next) => {
   try {
-    const images = await ImageConfig.find({ isActive: true })
-      .populate('planId', 'name rank')
-      .sort({ uploadedAt: -1 });
+    const images = await ImageConfig.find({ isActive: true }).sort({ uploadedAt: -1 });
     res.json({ success: true, count: images.length, data: images });
   } catch (err) {
     next(err);
@@ -26,31 +23,30 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /api/images/update
+// An empty/missing imageUrl deletes the override, reverting the card to its default.
 router.post(
   '/update',
   [
-    body('planId').isMongoId().withMessage('planId must be a valid id'),
-    body('imageUrl').isString().trim().notEmpty().withMessage('imageUrl is required'),
-    body('imageType').optional().isIn(['logo', 'banner', 'screenshot', 'icon']),
+    body('cardKey').isString().trim().notEmpty().withMessage('cardKey is required'),
+    body('imageUrl').optional({ nullable: true }).isString(),
+    body('imageType').optional().isIn(['card', 'logo', 'banner', 'screenshot', 'icon']),
   ],
   handleValidation,
   async (req, res, next) => {
     try {
-      const { planId, imageUrl, imageType } = req.body;
+      const { cardKey, imageUrl, imageType } = req.body;
+      const type = imageType || 'card';
 
-      const plan = await HostingPlan.findById(planId);
-      if (!plan) {
-        return res.status(404).json({ success: false, message: 'Hosting plan not found' });
+      if (!imageUrl) {
+        await ImageConfig.findOneAndDelete({ cardKey, imageType: type });
+        return res.json({ success: true, data: null });
       }
 
       const image = await ImageConfig.findOneAndUpdate(
-        { planId, imageType: imageType || 'logo' },
+        { cardKey, imageType: type },
         { imageUrl, uploadedAt: new Date(), isActive: true },
         { new: true, upsert: true, runValidators: true }
       );
-
-      plan.imageUrl = imageUrl;
-      await plan.save();
 
       res.json({ success: true, data: image });
     } catch (err) {

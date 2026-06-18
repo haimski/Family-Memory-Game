@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import ImageSettingsModal from './ImageSettingsModal.jsx';
 
-const EMOJI_POOL = [
+export const EMOJI_POOL = [
   '🐶', '🐱', '🐰', '🦊', '🐻', '🐼', '🦁', '🐸', '🐵', '🦋', '🌟', '🎈', '🌈', '🍎', '🚗', '🎁', '⚽', '🍕', '🎂', '🐢',
 ];
 
@@ -45,6 +46,23 @@ export default function MemoryGame() {
   const [score, setScore] = useState(0);
   const [locked, setLocked] = useState(false);
   const [won, setWon] = useState(false);
+  const [cardImages, setCardImages] = useState({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Load any saved custom card images so the board reflects them immediately,
+  // independent of whether the settings modal is ever opened.
+  useEffect(() => {
+    fetch('/api/images')
+      .then((res) => res.json())
+      .then((json) => {
+        const map = {};
+        (json.data || []).forEach((img) => {
+          map[img.cardKey] = img.imageUrl;
+        });
+        setCardImages(map);
+      })
+      .catch(() => {});
+  }, []);
 
   // Re-derive grid only when the breakpoint category actually changes,
   // so minor resizes (e.g. mobile address bar) don't reset an in-progress game.
@@ -145,9 +163,14 @@ export default function MemoryGame() {
             <span className="stat-value">{score}</span>
           </div>
         </div>
-        <button className="new-game-btn" onClick={() => startNewGame(config.pairs)}>
-          משחק חדש
-        </button>
+        <div className="header-actions">
+          <button className="new-game-btn" onClick={() => startNewGame(config.pairs)}>
+            משחק חדש
+          </button>
+          <button className="settings-btn" onClick={() => setSettingsOpen(true)}>
+            הגדרות
+          </button>
+        </div>
       </header>
 
       <div className="board" style={{ '--cols': config.cols }}>
@@ -163,7 +186,13 @@ export default function MemoryGame() {
             >
               <div className="card-inner">
                 <div className="card-face card-front">❓</div>
-                <div className="card-face card-back">{card.emoji}</div>
+                <div className="card-face card-back">
+                  {cardImages[card.emoji] ? (
+                    <img className="card-image" src={cardImages[card.emoji]} alt={card.emoji} />
+                  ) : (
+                    card.emoji
+                  )}
+                </div>
               </div>
             </button>
           );
@@ -182,6 +211,13 @@ export default function MemoryGame() {
           </div>
         </div>
       )}
+
+      <ImageSettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        cardKeys={EMOJI_POOL}
+        onSaved={(updated) => setCardImages(updated)}
+      />
     </div>
   );
 }

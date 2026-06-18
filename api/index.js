@@ -15,7 +15,7 @@ app.use(
     origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
