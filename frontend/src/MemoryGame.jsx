@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ImageSettingsModal from './ImageSettingsModal.jsx';
+import { useImages } from './ImagesContext.jsx';
 
 export const EMOJI_POOL = [
   '🐶', '🐱', '🐰', '🦊', '🐻', '🐼', '🦁', '🐸', '🐵', '🦋', '🌟', '🎈', '🌈', '🍎', '🚗', '🎁', '⚽', '🍕', '🎂', '🐢',
@@ -46,23 +47,8 @@ export default function MemoryGame() {
   const [score, setScore] = useState(0);
   const [locked, setLocked] = useState(false);
   const [won, setWon] = useState(false);
-  const [cardImages, setCardImages] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Load any saved custom card images so the board reflects them immediately,
-  // independent of whether the settings modal is ever opened.
-  useEffect(() => {
-    fetch('/api/images')
-      .then((res) => res.json())
-      .then((json) => {
-        const map = {};
-        (json.data || []).forEach((img) => {
-          map[img.cardKey] = img.imageUrl;
-        });
-        setCardImages(map);
-      })
-      .catch(() => {});
-  }, []);
+  const { images: cardImages, loading: imagesLoading, error: imagesError, refetch: refetchImages } = useImages();
 
   // Re-derive grid only when the breakpoint category actually changes,
   // so minor resizes (e.g. mobile address bar) don't reset an in-progress game.
@@ -171,6 +157,15 @@ export default function MemoryGame() {
             הגדרות
           </button>
         </div>
+        {imagesLoading && <p className="images-status">טעינה...</p>}
+        {imagesError && !imagesLoading && (
+          <p className="images-status error">
+            {imagesError}{' '}
+            <button type="button" className="retry-link" onClick={refetchImages}>
+              נסה שוב
+            </button>
+          </p>
+        )}
       </header>
 
       <div className="board" style={{ '--cols': config.cols }}>
@@ -212,12 +207,7 @@ export default function MemoryGame() {
         </div>
       )}
 
-      <ImageSettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        cardKeys={EMOJI_POOL}
-        onSaved={(updated) => setCardImages(updated)}
-      />
+      <ImageSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} cardKeys={EMOJI_POOL} />
     </div>
   );
 }

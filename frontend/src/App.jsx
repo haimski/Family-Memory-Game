@@ -1,5 +1,10 @@
 import MemoryGame from './MemoryGame.jsx';
+import { ImagesProvider } from './ImagesContext.jsx';
 
 export default function App() {
-  return <MemoryGame />;
+  return (
+    <ImagesProvider>
+      <MemoryGame />
+    </ImagesProvider>
+  );
 }

@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react';
+import { useImages } from './ImagesContext.jsx';
+import { ApiError, updateImage } from './api.js';
 
 const ALLOWED_FILE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+const NETWORK_MESSAGES = new Set(['בדוק את החיבור לאינטרנט', 'שגיאה בחיבור לשרת']);
 
 function validateImageUrl(url) {
   return new Promise((resolve) => {
     const trimmed = url.trim();
     if (!/^https?:\/\/.+/i.test(trimmed)) {
-      resolve({ ok: false, message: 'כתובת ה-URL חייבת להתחיל ב-http:// או https://' });
+      resolve({ ok: false, message: 'תמונה לא תקינה' });
       return;
     }
     const img = new Image();
     img.onload = () => resolve({ ok: true, url: trimmed });
-    img.onerror = () => resolve({ ok: false, message: 'לא ניתן לטעון תמונה מהכתובת שסופקה' });
+    img.onerror = () => resolve({ ok: false, message: 'תמונה לא תקינה' });
     img.src = trimmed;
   });
 }
@@ -36,35 +39,24 @@ function readFileAsDataUrl(file) {
   });
 }
 
-export default function ImageSettingsModal({ open, onClose, cardKeys, onSaved }) {
-  const [loading, setLoading] = useState(false);
+export default function ImageSettingsModal({ open, onClose, cardKeys }) {
+  const { images, loading: imagesLoading, error: imagesError, refetch, setImages } = useImages();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
-  const [originalImages, setOriginalImages] = useState({});
   const [draftImages, setDraftImages] = useState({});
   const [urlInputs, setUrlInputs] = useState({});
   const [busyKeys, setBusyKeys] = useState({});
   const [dragOverKey, setDragOverKey] = useState(null);
 
+  // Seed the draft from the globally-loaded images each time the modal opens,
+  // so edits start from the latest known server state without a duplicate fetch.
   useEffect(() => {
-    if (!open) return;
-    setMessage(null);
-    setLoading(true);
-    fetch('/api/images')
-      .then((res) => res.json())
-      .then((json) => {
-        const map = {};
-        (json.data || []).forEach((img) => {
-          map[img.cardKey] = img.imageUrl;
-        });
-        setOriginalImages(map);
-        setDraftImages(map);
-      })
-      .catch(() => {
-        setMessage({ type: 'error', text: 'שגיאה בטעינת התמונות הקיימות' });
-      })
-      .finally(() => setLoading(false));
-  }, [open]);
+    if (open) {
+      setMessage(null);
+      setDraftImages(images);
+      setUrlInputs({});
+    }
+  }, [open, images]);
 
   if (!open) return null;
 
@@ -101,7 +93,7 @@ export default function ImageSettingsModal({ open, onClose, cardKeys, onSaved })
       const dataUrl = await readFileAsDataUrl(file);
       setDraftImages((prev) => ({ ...prev, [key]: dataUrl }));
     } catch {
-      setMessage({ type: 'error', text: 'שגיאה בקריאת הקובץ' });
+      setMessage({ type: 'error', text: 'תמונה לא תקינה' });
     } finally {
       setBusy(key, false);
     }
@@ -128,29 +120,18 @@ export default function ImageSettingsModal({ open, onClose, cardKeys, onSaved })
     setSaving(true);
     setMessage(null);
 
-    const changedKeys = cardKeys.filter((key) => (draftImages[key] || '') !== (originalImages[key] || ''));
+    const changedKeys = cardKeys.filter((key) => (draftImages[key] || '') !== (images[key] || ''));
 
     try {
-      await Promise.all(
-        changedKeys.map((key) =>
-          fetch('/api/images/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cardKey: key, imageUrl: draftImages[key] || '' }),
-          }).then((res) => {
-            if (!res.ok) throw new Error('save failed');
-            return res.json();
-          })
-        )
-      );
-
+      await Promise.all(changedKeys.map((key) => updateImage(key, draftImages[key])));
       setMessage({ type: 'success', text: 'הצליח!' });
-      onSaved(draftImages);
+      setImages(draftImages);
       setTimeout(() => {
         onClose();
       }, 900);
-    } catch {
-      setMessage({ type: 'error', text: 'שגיאה בשמירת התמונות' });
+    } catch (err) {
+      const text = err instanceof ApiError && NETWORK_MESSAGES.has(err.userMessage) ? err.userMessage : 'נכשל בעדכון תמונות';
+      setMessage({ type: 'error', text });
     } finally {
       setSaving(false);
     }
@@ -173,7 +154,16 @@ export default function ImageSettingsModal({ open, onClose, cardKeys, onSaved })
 
         {message && <div className={`settings-message ${message.type}`}>{message.text}</div>}
 
-        {loading ? (
+        {imagesError && !imagesLoading && (
+          <div className="settings-message error">
+            {imagesError}{' '}
+            <button type="button" className="retry-link" onClick={refetch}>
+              נסה שוב
+            </button>
+          </div>
+        )}
+
+        {imagesLoading ? (
           <p className="settings-loading">טעינה...</p>
         ) : (
           <div className="image-grid">
@@ -242,7 +232,7 @@ export default function ImageSettingsModal({ open, onClose, cardKeys, onSaved })
         )}
 
         <div className="settings-footer">
-          <button type="button" className="new-game-btn" disabled={saving || loading} onClick={handleSave}>
+          <button type="button" className="new-game-btn" disabled={saving || imagesLoading} onClick={handleSave}>
             {saving ? 'טעינה...' : 'שמור'}
           </button>
           <button type="button" className="cancel-btn" disabled={saving} onClick={handleCancel}>
