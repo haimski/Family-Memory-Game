@@ -15,6 +15,13 @@ const POINTS_PER_MATCH = 100;
 const PENALTY_PER_MOVE = 10;
 const PERFECT_GAME_BONUS = 500;
 
+// The app never writes this key - it's only set manually via the browser
+// console, as a lightweight way to keep the settings button hidden from
+// casual players without building real authentication.
+function isSettingsEnabled() {
+  return window.localStorage.getItem('gameSettings') === 'enabled';
+}
+
 function getGridConfig(width) {
   if (width < 600) return { cols: 3, rows: 4, pairs: 6 };
   if (width < 900) return { cols: 4, rows: 4, pairs: 8 };
@@ -183,9 +190,11 @@ export default function MemoryGame() {
           <button className="new-game-btn" onClick={() => startNewGame(config.pairs)}>
             משחק חדש
           </button>
-          <button className="settings-btn" onClick={() => setSettingsOpen(true)}>
-            הגדרות
-          </button>
+          {isSettingsEnabled() && (
+            <button className="settings-btn" onClick={() => setSettingsOpen(true)}>
+              הגדרות
+            </button>
+          )}
           <button
             className="settings-btn"
             onClick={() => {
