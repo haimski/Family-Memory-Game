@@ -6,6 +6,7 @@ const cors = require('cors');
 const connectDB = require('../config/db');
 const hostingRoutes = require('./routes/hosting');
 const imagesRoutes = require('./routes/images');
+const scoresRoutes = require('./routes/scores');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -32,6 +33,7 @@ const requireDB = async (req, res, next) => {
 
 app.use('/api/hosting-plans', requireDB, hostingRoutes);
 app.use('/api/images', requireDB, imagesRoutes);
+app.use('/api/scores', requireDB, scoresRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });

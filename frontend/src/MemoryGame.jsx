@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import ImageSettingsModal from './ImageSettingsModal.jsx';
+import TopScoreModal from './TopScoreModal.jsx';
+import HallOfFameModal from './HallOfFameModal.jsx';
 import { useImages } from './ImagesContext.jsx';
+import { getScores } from './api.js';
 
 export const EMOJI_POOL = [
   '🐶', '🐱', '🐰', '🦊', '🐻', '🐼', '🦁', '🐸', '🐵', '🦋', '🌟', '🎈', '🌈', '🍎', '🚗', '🎁', '⚽', '🍕', '🎂', '🐢',
@@ -27,6 +30,16 @@ function shuffle(array) {
   return result;
 }
 
+// Scores list is sorted descending. A tie with the current 1st or 5th place
+// does not count as bumping that rank - only a strictly higher score does.
+function classifyScore(finalScore, scores) {
+  const currentTop = scores[0]?.score;
+  const currentFifth = scores[4]?.score;
+  if (currentTop === undefined || finalScore > currentTop) return 'record';
+  if (currentFifth === undefined || finalScore > currentFifth) return 'top5';
+  return 'plain';
+}
+
 function createDeck(pairs) {
   const emojis = EMOJI_POOL.slice(0, pairs);
   const deck = shuffle([...emojis, ...emojis]);
@@ -48,6 +61,9 @@ export default function MemoryGame() {
   const [locked, setLocked] = useState(false);
   const [won, setWon] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [winTier, setWinTier] = useState(null);
+  const [hallOfFameOpen, setHallOfFameOpen] = useState(false);
+  const [hallOfFameFromWin, setHallOfFameFromWin] = useState(false);
   const { images: cardImages, loading: imagesLoading, error: imagesError, refetch: refetchImages } = useImages();
 
   // Re-derive grid only when the breakpoint category actually changes,
@@ -70,10 +86,15 @@ export default function MemoryGame() {
     if (config.pairs > 0 && matches === config.pairs) {
       const totalCards = config.pairs * 2;
       const isPerfectGame = moves === totalCards;
+      const finalScore = isPerfectGame ? score + PERFECT_GAME_BONUS : score;
       if (isPerfectGame) {
-        setScore((s) => s + PERFECT_GAME_BONUS);
+        setScore(finalScore);
       }
       setWon(true);
+      setWinTier('checking');
+      getScores()
+        .then((list) => setWinTier(classifyScore(finalScore, list)))
+        .catch(() => setWinTier('plain'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matches]);
@@ -86,6 +107,15 @@ export default function MemoryGame() {
     setScore(0);
     setLocked(false);
     setWon(false);
+    setWinTier(null);
+    setHallOfFameOpen(false);
+    setHallOfFameFromWin(false);
+  }
+
+  function handleScoreSaved() {
+    setWinTier(null);
+    setHallOfFameFromWin(true);
+    setHallOfFameOpen(true);
   }
 
   function handleCardClick(index) {
@@ -156,6 +186,15 @@ export default function MemoryGame() {
           <button className="settings-btn" onClick={() => setSettingsOpen(true)}>
             הגדרות
           </button>
+          <button
+            className="settings-btn"
+            onClick={() => {
+              setHallOfFameFromWin(false);
+              setHallOfFameOpen(true);
+            }}
+          >
+            שיאים
+          </button>
         </div>
         {imagesLoading && <p className="images-status">טעינה...</p>}
         {imagesError && !imagesLoading && (
@@ -194,10 +233,18 @@ export default function MemoryGame() {
         })}
       </div>
 
-      {won && (
+      {won && winTier === 'checking' && (
         <div className="win-overlay" role="dialog" aria-modal="true">
           <div className="win-modal">
-            <h2>כל הכבוד! ניצחת!</h2>
+            <p className="final-score-label">בודק תוצאה...</p>
+          </div>
+        </div>
+      )}
+
+      {won && winTier === 'plain' && (
+        <div className="win-overlay" role="dialog" aria-modal="true">
+          <div className="win-modal">
+            <h2>כל הכבוד! השגת תוצאה גבוהה</h2>
             <p className="final-score-label">ניקוד סופי</p>
             <p className="final-score-value">{score}</p>
             <button className="new-game-btn" onClick={() => startNewGame(config.pairs)}>
@@ -206,6 +253,21 @@ export default function MemoryGame() {
           </div>
         </div>
       )}
+
+      <TopScoreModal
+        open={won && (winTier === 'top5' || winTier === 'record')}
+        tier={winTier}
+        score={score}
+        onSaved={handleScoreSaved}
+        onSkip={() => startNewGame(config.pairs)}
+      />
+
+      <HallOfFameModal
+        open={hallOfFameOpen}
+        onClose={() => setHallOfFameOpen(false)}
+        showNewGameButton={hallOfFameFromWin}
+        onNewGame={() => startNewGame(config.pairs)}
+      />
 
       <ImageSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} cardKeys={EMOJI_POOL} />
     </div>

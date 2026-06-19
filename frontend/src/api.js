@@ -66,3 +66,17 @@ export function updateImage(cardKey, imageUrl) {
     body: JSON.stringify({ cardKey, imageUrl: imageUrl || '' }),
   });
 }
+
+// Sorted descending by score, at most 5 entries (the backend itself never
+// stores more than that, this isn't just a client-side slice).
+export async function getScores() {
+  const json = await request('/api/scores');
+  return json.data || [];
+}
+
+export function submitScore(name, score) {
+  return request('/api/scores', {
+    method: 'POST',
+    body: JSON.stringify({ name, score }),
+  });
+}
